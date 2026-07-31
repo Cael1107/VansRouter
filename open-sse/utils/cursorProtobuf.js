@@ -711,7 +711,7 @@ function decodeField(buffer, offset) {
   return [fieldNum, wireType, value, pos];
 }
 
-function decodeMessage(data) {
+export function decodeMessage(data) {
   const fields = new Map();
   let pos = 0;
 

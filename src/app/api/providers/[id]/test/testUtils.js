@@ -239,7 +239,7 @@ async function probeCloudCodeAssistAccess(connection, accessToken, effectiveProx
   };
 }
 
-async function refreshOAuthToken(connection) {
+export async function refreshOAuthToken(connection) {
   const provider = connection.provider;
   const refreshToken = connection.refreshToken;
   if (!refreshToken) return null;
