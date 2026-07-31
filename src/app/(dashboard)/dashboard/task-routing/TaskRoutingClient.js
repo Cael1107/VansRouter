@@ -81,10 +81,8 @@ export default function TaskRoutingClient() {
       if (res.ok) {
         const data = await res.json();
         const tr = data.taskRouting || {};
-        setPlanningModels(tr.planning || planning);
-        setExecutionModels(tr.execution || execution);
-        setPlanningRaw((tr.planning || planning).join(", "));
-        setExecutionRaw((tr.execution || execution).join(", "));
+      setPlanningModels(tr.planning || []);
+      setExecutionModels(tr.execution || []);
         setSaveMsg("Saved ✓");
         setTimeout(() => setSaveMsg(""), 2000);
       } else {
