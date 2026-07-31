@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, Button, Input, Toggle } from "@/shared/components";
 
+/**
+ * TaskRouting page - UI for configuring task routing (planning/execution models)
+ */
 export default function TaskRoutingClient() {
   const [enabled, setEnabled] = useState(false);
   const [planningModels, setPlanningModels] = useState([]);
@@ -11,14 +14,25 @@ export default function TaskRoutingClient() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
-
-  // Raw text inputs (user edits these, parsed on save)
-  const [planningRaw, setPlanningRaw] = useState("");
-  const [executionRaw, setExecutionRaw] = useState("");
+  const [allModels, setAllModels] = useState([]);
+  const [newPlanning, setNewPlanning] = useState("");
+  const [newExecution, setNewExecution] = useState("");
 
   useEffect(() => {
     fetchTaskRouting();
+    fetchModels();
   }, []);
+
+  const fetchModels = async () => {
+    try {
+      const res = await fetch("/api/models");
+      const data = await res.json();
+      const models = data.models || data || [];
+      setAllModels(Array.isArray(models) ? models.map((m) => m.id || m.name || m) : []);
+    } catch (e) {
+      console.error("Failed to fetch models:", e);
+    }
+  };
 
   const fetchTaskRouting = async () => {
     try {
@@ -29,8 +43,6 @@ export default function TaskRoutingClient() {
       setPlanningModels(Array.isArray(tr.planning) ? tr.planning : []);
       setExecutionModels(Array.isArray(tr.execution) ? tr.execution : []);
       setAutoRouteByTools(tr.autoRouteByTools !== false);
-      setPlanningRaw((Array.isArray(tr.planning) ? tr.planning : []).join(", "));
-      setExecutionRaw((Array.isArray(tr.execution) ? tr.execution : []).join(", "));
     } catch (e) {
       console.error("Failed to fetch task routing:", e);
     } finally {
@@ -38,25 +50,31 @@ export default function TaskRoutingClient() {
     }
   };
 
-  const parseModels = (raw) =>
-    raw
+  const addModel = (list, setter, raw) => {
+    const models = raw
       .split(/[,\n]+/)
       .map((m) => m.trim())
       .filter(Boolean);
+    if (models.length) {
+      setter([...list, ...models.filter((m) => !list.includes(m))]);
+    }
+    return "";
+  };
+
+  const removeModel = (list, setter, model) =>
+    setter(list.filter((m) => m !== model));
 
   const handleSave = async () => {
     setSaving(true);
     setSaveMsg("");
     try {
-      const planning = parseModels(planningRaw);
-      const execution = parseModels(executionRaw);
       const res = await fetch("/api/task-routing", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled,
-          planning,
-          execution,
+          planning: planningModels,
+          execution: executionModels,
           autoRouteByTools,
         }),
       });
@@ -157,20 +175,23 @@ export default function TaskRoutingClient() {
         <p className="text-xs text-white/40 mb-2">
           Models used for planning/reasoning (no tool execution)
         </p>
-        <textarea
-          className="w-full h-24 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-blue-500 font-mono"
-          placeholder="WorkBuddy/kimi-k2.5, WorkBuddy/gpt-5.6-sol, deepseek-v4-pro"
-          value={planningRaw}
-          onChange={(e) => setPlanningRaw(e.target.value)}
-        />
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-white/80 focus:outline-none focus:border-blue-500"
+            placeholder="kimi-k2.5, gpt-5.6-sol"
+            value={newPlanning}
+            onChange={(e) => setNewPlanning(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') setNewPlanning(addModel(planningModels, setPlanningModels, newPlanning)) }}
+          />
+          <Button onClick={() => setNewPlanning(addModel(planningModels, setPlanningModels, newPlanning))} size="sm" disabled={!newPlanning.trim()}>Add</Button>
+        </div>
         {planningModels.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {planningModels.map((m, i) => (
-              <span
-                key={i}
-                className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded"
-              >
+          <div className="flex flex-wrap gap-1.5">
+            {planningModels.map((m) => (
+              <span key={m} className="flex items-center gap-1 text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">
                 {m}
+                <button onClick={() => removeModel(planningModels, setPlanningModels, m)} className="hover:text-red-400">×</button>
               </span>
             ))}
           </div>
@@ -183,20 +204,23 @@ export default function TaskRoutingClient() {
         <p className="text-xs text-white/40 mb-2">
           Models used for tool execution (tool calls, function calling)
         </p>
-        <textarea
-          className="w-full h-24 bg-white/5 border border-white/10 rounded px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-blue-500 font-mono"
-          placeholder="mimo-v2-flash, deepseek-v4-pro, gemini-3.1-flash-lite"
-          value={executionRaw}
-          onChange={(e) => setExecutionRaw(e.target.value)}
-        />
+        <div className="flex gap-2 mb-2">
+          <input
+            type="text"
+            className="flex-1 bg-white/5 border border-white/10 rounded px-3 py-1.5 text-sm text-white/80 focus:outline-none focus:border-blue-500"
+            placeholder="mimo-v2-flash, deepseek-v4-pro"
+            value={newExecution}
+            onChange={(e) => setNewExecution(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') setNewExecution(addModel(executionModels, setExecutionModels, newExecution)) }}
+          />
+          <Button onClick={() => setNewExecution(addModel(executionModels, setExecutionModels, newExecution))} size="sm" disabled={!newExecution.trim()}>Add</Button>
+        </div>
         {executionModels.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {executionModels.map((m, i) => (
-              <span
-                key={i}
-                className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded"
-              >
+          <div className="flex flex-wrap gap-1.5">
+            {executionModels.map((m) => (
+              <span key={m} className="flex items-center gap-1 text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded">
                 {m}
+                <button onClick={() => removeModel(executionModels, setExecutionModels, m)} className="hover:text-red-400">×</button>
               </span>
             ))}
           </div>
