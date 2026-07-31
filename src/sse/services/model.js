@@ -78,6 +78,22 @@ export async function getModelInfo(modelStr) {
   return getModelInfoCore(modelStr, getModelAliases);
 }
 
+// In-memory combo overrides (for task routing). Cleared on process restart.
+// Map<comboName, model[]> — takes priority over DB combos.
+const _comboOverrides = new Map();
+
+export function setComboOverride(name, models) {
+  if (models && models.length > 0) {
+    _comboOverrides.set(name, models);
+  } else {
+    _comboOverrides.delete(name);
+  }
+}
+
+export function getComboOverride(name) {
+  return _comboOverrides.get(name) || null;
+}
+
 /**
  * Check if model is a combo and get models list
  * @returns {Promise<string[]|null>} Array of models or null if not a combo
@@ -85,6 +101,10 @@ export async function getModelInfo(modelStr) {
 export async function getComboModels(modelStr) {
   // Only check if it's not in provider/model format
   if (modelStr.includes("/")) return null;
+
+  // In-memory overrides win (task routing uses this)
+  const override = _comboOverrides.get(modelStr);
+  if (override && override.length > 0) return override;
 
   const combo = await getComboByName(modelStr);
   if (combo && combo.models && combo.models.length > 0) {

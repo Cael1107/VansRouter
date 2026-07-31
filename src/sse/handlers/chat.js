@@ -33,7 +33,7 @@ import { updateProviderConnection, getProviderConnections } from "@/lib/localDb"
 import { isModelAllowed } from "../services/allowedModels.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
 import { getSettings } from "@/lib/localDb";
-import { getModelInfo, getComboModels } from "../services/model.js";
+import { getModelInfo, getComboModels, setComboOverride } from "../services/model.js";
 import { handleChatCore } from "open-sse/handlers/chatCore.js";
 import { DEFAULT_HEADROOM_URL } from "@/lib/headroom/detect";
 import { errorResponse, unavailableResponse, withSelectedConnectionHeader } from "open-sse/utils/error.js";
@@ -138,6 +138,41 @@ export async function handleChat(request, clientRawRequest = null) {
   const userAgent = request?.headers?.get("user-agent") || "";
   const bypassResponse = handleBypassRequest(body, modelStr, userAgent, !!settings.ccFilterNaming);
   if (bypassResponse) return bypassResponse.response || bypassResponse;
+
+  // ── Task Routing (additive, opt-in) ─────────────────────────────────
+  // Routes by tool presence or X-Task-Mode header. Only triggers when
+  // (a) explicit `task-router` model name OR (b) X-Task-Mode header set.
+  // Standard combo flow is unaffected when neither is present.
+  if (settings.taskRouting?.enabled) {
+    const taskModeHeader = (request.headers.get("x-task-mode") || "").toLowerCase();
+    const isTaskRouterModel = modelStr === "task-router";
+    const explicitMode = ["plan", "execute", "auto"].includes(taskModeHeader);
+
+    if (isTaskRouterModel || explicitMode) {
+      const hasTools = toolCount > 0;
+      let mode;
+      if (taskModeHeader === "plan") mode = "planning";
+      else if (taskModeHeader === "execute") mode = "execution";
+      else if (taskModeHeader === "auto" || isTaskRouterModel) {
+        mode = (settings.taskRouting.autoRouteByTools && hasTools) ? "execution" : "planning";
+      }
+
+      const modelList = mode === "execution"
+        ? (settings.taskRouting.execution || [])
+        : (settings.taskRouting.planning || []);
+
+      if (modelList.length > 0) {
+        log.info("ROUTING", `task-router → ${mode} → [${modelList.join(", ")}]`);
+        // Inject virtual combo into in-memory override cache (model.js)
+        const virtualComboName = `__taskrouter_${mode}`;
+        setComboOverride(virtualComboName, modelList);
+        body.model = virtualComboName;
+      } else {
+        log.warn("ROUTING", `task-router enabled but ${mode} list is empty — falling back to default flow`);
+      }
+    }
+  }
+  // ── End Task Routing ────────────────────────────────────────────────
 
   // Check if model is a combo (has multiple models with fallback)
   const comboModels = await getComboModels(modelStr);

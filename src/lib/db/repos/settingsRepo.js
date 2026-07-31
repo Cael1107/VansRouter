@@ -44,6 +44,12 @@ const DEFAULT_SETTINGS = {
   cavemanLevel: "full",
   ponytailEnabled: false,
   ponytailLevel: "full",
+  taskRouting: {
+    enabled: false,
+    execution: ["mimo-v2-flash", "deepseek-v4-pro", "gemini-3.1-flash-lite"],
+    planning: ["WorkBuddy/kimi-k2.5", "WorkBuddy/gpt-5.6-sol"],
+    autoRouteByTools: true,
+  },
 };
 
 async function readRaw() {
