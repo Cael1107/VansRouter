@@ -8,24 +8,48 @@ export default function TaskRoutingClient() {
   const [planningModels, setPlanningModels] = useState([]);
   const [executionModels, setExecutionModels] = useState([]);
   const [autoRouteByTools, setAutoRouteByTools] = useState(true);
+  const [activeProviders, setActiveProviders] = useState([]);
+  const [modelAliases, setModelAliases] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [showPicker, setShowPicker] = useState(null); // "planning" | "execution"
 
   useEffect(() => {
-    fetch("/api/task-routing")
-      .then((r) => r.json())
-      .then((data) => {
-        const tr = data.taskRouting || {};
+    Promise.all([
+      fetch("/api/task-routing", { cache: "no-store" }),
+      fetch("/api/providers", { cache: "no-store" }),
+      fetch("/api/models/alias", { cache: "no-store" }),
+    ])
+      .then(async ([trRes, provRes, aliasRes]) => {
+        const tr = (await trRes.json()).taskRouting || {};
         setEnabled(!!tr.enabled);
         setPlanningModels(tr.planning || []);
         setExecutionModels(tr.execution || []);
         setAutoRouteByTools(tr.autoRouteByTools !== false);
+        if (provRes.ok) setActiveProviders((await provRes.json()).connections || []);
+        if (aliasRes.ok) setModelAliases((await aliasRes.json()).aliases || {});
       })
       .catch((e) => console.error("fetch task-routing:", e))
       .finally(() => setLoading(false));
   }, []);
+
+  // Refresh providers/aliases every time modal opens — same as combos
+  useEffect(() => {
+    if (!showPicker) return;
+    let cancelled = false;
+    Promise.all([
+      fetch("/api/providers", { cache: "no-store" }),
+      fetch("/api/models/alias", { cache: "no-store" }),
+    ])
+      .then(async ([provRes, aliasRes]) => {
+        if (cancelled) return;
+        if (provRes.ok) setActiveProviders((await provRes.json()).connections || []);
+        if (aliasRes.ok) setModelAliases((await aliasRes.json()).aliases || {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [showPicker]);
 
   const handleAddModel = (m) => {
     if (!m?.value) return;
@@ -151,6 +175,8 @@ export default function TaskRoutingClient() {
         onSelect={handleAddModel}
         title={showPicker === "planning" ? "Add Planning Model" : "Add Execution Model"}
         closeOnSelect={true}
+        activeProviders={activeProviders}
+        modelAliases={modelAliases}
       />
     </div>
   );
