@@ -41,6 +41,9 @@ COPY --from=builder /app/open-sse ./open-sse
 COPY --from=builder /app/src/mitm ./src/mitm
 # Standalone node_modules may omit deps only required by the MITM child process.
 COPY --from=builder /app/node_modules/node-forge ./node_modules/node-forge
+# uuid is imported at runtime by connectionsRepo.js / shared/utils / open-sse but
+# Next tracing omits it from standalone — copy explicitly (same pattern as node-forge).
+COPY --from=builder /app/node_modules/uuid ./node_modules/uuid
 # Ensure `next` is available at runtime in case tracing did not include it.
 COPY --from=builder /app/node_modules/next ./node_modules/next
 
